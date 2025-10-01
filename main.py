@@ -488,6 +488,8 @@ class FSMWindow(QWidget):
     # --- Minimization and Conversion Actions ---
     def on_tablefill(self):
         if isinstance(self.fsm, DFA):
+            # Do NOT call self.display_fsm(self.fsm) after updating self.fsm here,
+            # because display_fsm() will clear the minimization results and diagram.
             self.tuple_display.clear()
             self.table_display.clear()
             self.diagram_label.clear()
@@ -521,7 +523,6 @@ class FSMWindow(QWidget):
             self.result_diagram.setPixmap(QPixmap("minimized_dfa_diagram.png").scaled(400, 250, Qt.AspectRatioMode.KeepAspectRatio))
             # Update current FSM and main diagram
             self.fsm = minimized
-            # Only update the main diagram, not the results area
             dot_main = self.fsm.to_graphviz()
             dot_main.render("fsm_diagram", format="png", cleanup=True)
             self.diagram_label.setPixmap(QPixmap("fsm_diagram.png").scaled(600, 400, Qt.AspectRatioMode.KeepAspectRatio))
@@ -530,6 +531,8 @@ class FSMWindow(QWidget):
 
     def on_hopcroft(self):
         if isinstance(self.fsm, DFA):
+            # Do NOT call self.display_fsm(self.fsm) after updating self.fsm here,
+            # because display_fsm() will clear the minimization results and diagram.
             self.tuple_display.clear()
             self.table_display.clear()
             self.diagram_label.clear()
@@ -556,6 +559,8 @@ class FSMWindow(QWidget):
 
     def on_brzozowski(self):
         if isinstance(self.fsm, DFA):
+            # Do NOT call self.display_fsm(self.fsm) after updating self.fsm here,
+            # because display_fsm() will clear the minimization results and diagram.
             self.tuple_display.clear()
             self.table_display.clear()
             self.diagram_label.clear()

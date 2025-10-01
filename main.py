@@ -26,14 +26,15 @@ class DFA:
         dot = graphviz.Digraph(format='png')
         dot.attr(rankdir='LR')
         dot.node('', shape='none')
-        dot.edge('', self.start)
+        dot.edge('', str(self.start))
         for s in sorted(self.states):
             shape = 'doublecircle' if s in self.finals else 'circle'
-            dot.node(s, shape=shape)
+            dot.node(str(s), shape=shape)
         edges = defaultdict(list)
         for s, trans in self.transitions.items():
             for a, t in trans.items():
-                edges[(s, t)].append(str(a))
+                # Ensure s and t are strings for Graphviz compatibility
+                edges[(str(s), str(t))].append(str(a))
         for (s, t), labels in edges.items():
             dot.edge(s, t, label=','.join(labels))
         return dot
@@ -50,13 +51,13 @@ class NFA:
         dot = graphviz.Digraph(format='png')
         dot.attr(rankdir='LR')
         dot.node('', shape='none')
-        dot.edge('', self.start)
+        dot.edge('', str(self.start))
         for s, trans in self.transitions.items():
             shape = 'doublecircle' if s in self.finals else 'circle'
-            dot.node(s, shape=shape)
+            dot.node(str(s), shape=shape)
             for a, targets in trans.items():
                 for t in targets:
-                    dot.edge(s, t, label=str(a))
+                    dot.edge(str(s), str(t), label=str(a))
         return dot
 
 class ENFA(NFA):
@@ -76,12 +77,12 @@ class Moore:
         dot = graphviz.Digraph(format='png')
         dot.attr(rankdir='LR')
         dot.node('', shape='none')
-        dot.edge('', self.start)
+        dot.edge('', str(self.start))
         for s in sorted(self.states):
-            dot.node(s, label=f"{s}/{self.outputs.get(s,'')}", shape='circle')
+            dot.node(str(s), label=f"{s}/{self.outputs.get(s,'')}", shape='circle')
         for s, trans in self.transitions.items():
             for a, t in trans.items():
-                dot.edge(s, t, label=str(a))
+                dot.edge(str(s), str(t), label=str(a))
         return dot
 
 class Mealy:
@@ -95,12 +96,12 @@ class Mealy:
         dot = graphviz.Digraph(format='png')
         dot.attr(rankdir='LR')
         dot.node('', shape='none')
-        dot.edge('', self.start)
+        dot.edge('', str(self.start))
         for s in sorted(self.states):
-            dot.node(s, shape='circle')
+            dot.node(str(s), shape='circle')
         for s, trans in self.transitions.items():
             for a, (t, out) in trans.items():
-                dot.edge(s, t, label=f"{a}/{out}")
+                dot.edge(str(s), str(t), label=f"{a}/{out}")
         return dot
 
 # ---------------- Conversion Helpers ----------------
@@ -367,14 +368,33 @@ class FSMWindow(QWidget):
         right_layout.addWidget(self.diagram_label, 4)
 
         # --- Results for Minimization (Table Filling, Hopcroft, Brzozowski) ---
+        # Replace vertical layout with horizontal layout for results and new diagram
+        result_hbox = QHBoxLayout()
+        # Minimization Results (left)
+        result_vbox = QVBoxLayout()
         self.result_label = QLabel("Minimization Results")
         self.result_label.setStyleSheet("font-weight: bold;")
         self.result_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.result_display = QTextEdit(readOnly=True)
         self.result_display.setMinimumHeight(120)
         self.result_display.setStyleSheet("background: #f7f7f7;")
-        right_layout.addWidget(self.result_label)
-        right_layout.addWidget(self.result_display)
+        result_vbox.addWidget(self.result_label)
+        result_vbox.addWidget(self.result_display)
+        result_hbox.addLayout(result_vbox, 2)
+
+        # New Diagram (right)
+        diagram_vbox = QVBoxLayout()
+        self.result_diagram_label = QLabel("New Diagram")
+        self.result_diagram_label.setStyleSheet("font-weight: bold;")
+        self.result_diagram_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.result_diagram = QLabel(alignment=Qt.AlignmentFlag.AlignCenter)
+        self.result_diagram.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.result_diagram.setStyleSheet("background: #fafbfc; border: 1px solid #ddd;")
+        diagram_vbox.addWidget(self.result_diagram_label)
+        diagram_vbox.addWidget(self.result_diagram, 1)
+        result_hbox.addLayout(diagram_vbox, 3)
+
+        right_layout.addLayout(result_hbox)
 
         # --- Main Layout ---
         layout = QHBoxLayout(self)
@@ -407,8 +427,9 @@ class FSMWindow(QWidget):
         dot.render("fsm_diagram", format="png", cleanup=True)
         self.diagram_label.setPixmap(QPixmap("fsm_diagram.png").scaled(600, 400, Qt.AspectRatioMode.KeepAspectRatio))
 
-        # Clear minimization result area
-        self.result_display.clear()
+        # Do not clear minimization result area and new diagram here!
+        # self.result_display.clear()
+        # self.result_diagram.clear()
 
     # --- FSM Generation ---
     def on_generate(self):
@@ -471,8 +492,6 @@ class FSMWindow(QWidget):
             self.table_display.clear()
             self.diagram_label.clear()
             minimized, table, merge, state_order = table_filling_minimize(self.fsm)
-            self.fsm = minimized
-            self.display_fsm(self.fsm)
             # Show Table Filling Table
             table_str = "Table Filling Table (X=marked):\n"
             n = len(state_order)
@@ -496,6 +515,16 @@ class FSMWindow(QWidget):
                 f"Finals: {minimized.finals}\nTransitions:\n" +
                 "\n".join([f"  {s}: {t}" for s, t in minimized.transitions.items()])
             )
+            # Show new diagram
+            dot = minimized.to_graphviz()
+            dot.render("minimized_dfa_diagram", format="png", cleanup=True)
+            self.result_diagram.setPixmap(QPixmap("minimized_dfa_diagram.png").scaled(400, 250, Qt.AspectRatioMode.KeepAspectRatio))
+            # Update current FSM and main diagram
+            self.fsm = minimized
+            # Only update the main diagram, not the results area
+            dot_main = self.fsm.to_graphviz()
+            dot_main.render("fsm_diagram", format="png", cleanup=True)
+            self.diagram_label.setPixmap(QPixmap("fsm_diagram.png").scaled(600, 400, Qt.AspectRatioMode.KeepAspectRatio))
         else:
             QMessageBox.warning(self, "Error", "Table Filling minimization is only for DFA.")
 
@@ -505,9 +534,6 @@ class FSMWindow(QWidget):
             self.table_display.clear()
             self.diagram_label.clear()
             minimized, P_steps = hopcroft_minimize(self.fsm)
-            self.fsm = minimized
-            self.display_fsm(self.fsm)
-            # Show partition steps
             part_str = "Hopcroft Partition Steps:\n"
             for i, P in enumerate(P_steps):
                 part_str += f"Step {i}: " + ", ".join([f"P{i+1}={sorted(list(g))}" for i,g in enumerate(P)]) + "\n"
@@ -516,6 +542,15 @@ class FSMWindow(QWidget):
             part_str += f"Finals: {minimized.finals}\nTransitions:\n"
             part_str += "\n".join([f"  {s}: {t}" for s, t in minimized.transitions.items()])
             self.result_display.setPlainText(part_str)
+            # Show new diagram
+            dot = minimized.to_graphviz()
+            dot.render("hopcroft_minimized_dfa_diagram", format="png", cleanup=True)
+            self.result_diagram.setPixmap(QPixmap("hopcroft_minimized_dfa_diagram.png").scaled(400, 250, Qt.AspectRatioMode.KeepAspectRatio))
+            # Update current FSM and main diagram
+            self.fsm = minimized
+            dot_main = self.fsm.to_graphviz()
+            dot_main.render("fsm_diagram", format="png", cleanup=True)
+            self.diagram_label.setPixmap(QPixmap("fsm_diagram.png").scaled(600, 400, Qt.AspectRatioMode.KeepAspectRatio))
         else:
             QMessageBox.warning(self, "Error", "Hopcroft minimization is only for DFA.")
 
@@ -526,13 +561,12 @@ class FSMWindow(QWidget):
             self.diagram_label.clear()
             steps = brzozowski_minimize_steps(self.fsm)
             result_str = ""
+            # Show all steps in result_display, show last diagram in result_diagram
             for i, (desc, fsm) in enumerate(steps):
-                # Table
                 table_text = ""
                 for s in sorted(fsm.states):
                     row = [s] + [str(getattr(fsm,"transitions")[s].get(a,"-")) for a in sorted(fsm.alphabet)]
                     table_text += "\t".join(row)+"\n"
-                # Diagram
                 dot = fsm.to_graphviz()
                 fname = f"brzozowski_step_{i}.png"
                 dot.render(f"brzozowski_step_{i}", format="png", cleanup=True)
@@ -541,10 +575,16 @@ class FSMWindow(QWidget):
                     result_str += f"Finals: {fsm.finals}\n"
                 result_str += f"Transitions:\n{table_text}\n"
                 result_str += f"Diagram saved as {fname}\n\n"
-            # Show last DFA as current
-            self.fsm = steps[-1][1]
-            self.display_fsm(self.fsm)
             self.result_display.setPlainText(result_str)
+            # Show last diagram as new diagram
+            last_dot = steps[-1][1].to_graphviz()
+            last_dot.render("brzozowski_minimized_dfa_diagram", format="png", cleanup=True)
+            self.result_diagram.setPixmap(QPixmap("brzozowski_minimized_dfa_diagram.png").scaled(400, 250, Qt.AspectRatioMode.KeepAspectRatio))
+            # Update current FSM and main diagram
+            self.fsm = steps[-1][1]
+            dot_main = self.fsm.to_graphviz()
+            dot_main.render("fsm_diagram", format="png", cleanup=True)
+            self.diagram_label.setPixmap(QPixmap("fsm_diagram.png").scaled(600, 400, Qt.AspectRatioMode.KeepAspectRatio))
         else:
             QMessageBox.warning(self, "Error", "Brzozowski minimization is only for DFA.")
 
@@ -599,6 +639,23 @@ class FSMWindow(QWidget):
             self.result_display.setPlainText("Converted Mealy machine to Moore machine.")
         else:
             QMessageBox.warning(self, "Error", "Current FSM is not a Mealy machine.")
+
+    # --- Moore to Mealy conversion ---
+    def on_moore_to_mealy(self):
+        if isinstance(self.fsm, Moore):
+            # For each transition, output is the output of the destination state
+            mealy_trans = {}
+            for s in self.fsm.states:
+                mealy_trans[s] = {}
+                for a, t in self.fsm.transitions[s].items():
+                    out = self.fsm.outputs.get(t, 0)
+                    mealy_trans[s][a] = (t, out)
+            mealy = Mealy(self.fsm.states, self.fsm.alphabet, mealy_trans, self.fsm.start)
+            self.fsm = mealy
+            self.display_fsm(self.fsm)
+            self.result_display.setPlainText("Converted Moore machine to Mealy machine.")
+        else:
+            QMessageBox.warning(self, "Error", "Current FSM is not a Moore machine.")
 
     # --- E-NFA to NFA conversion ---
     def on_enfa_to_nfa(self):
